@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pang Kang Liao Results</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <h1>Meeting Point Results</h1>
+    <div id="results">
+        {% if meeting_point %}
+            <p>The optimal meeting point is at:</p>
+            <p><strong>{{ meeting_point }}</strong></p>
+            <p>Estimated travel time: <strong>{{ travel_time }}</strong> minutes</p>
+        {% else %}
+            <p>No suitable meeting point found within the specified time threshold.</p>
+        {% endif %}
+    </div>
+    <a href="/">Go back</a>
+    <script src="/scripts.js"></script>
+</body>
+</html>
