@@ -56,6 +56,8 @@ document.addEventListener('DOMContentLoaded', function () {
     let pairCount = 1;
     let routeLayers = []; // Store route layers to clear them later
 
+    const routeColors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'yellow'];
+
     // Function to fetch suggestions from OneMap API
     async function fetchSuggestions(query) {
         const url = `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${query}&returnGeom=Y&getAddrDetails=Y&pageNum=1`;
@@ -70,10 +72,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to update datalist with suggestions
     async function updateSuggestions(input, datalistId) {
         const query = input.value.trim();
-        if (query.length > 2) {
+        if (query.length > 2) { // Only fetch suggestions if the query is longer than 2 characters
             const suggestions = await fetchSuggestions(query);
             const datalist = document.getElementById(datalistId);
-            datalist.innerHTML = '';
+            datalist.innerHTML = ''; // Clear previous suggestions
             suggestions.forEach((suggestion) => {
                 const option = document.createElement('option');
                 option.value = suggestion;
@@ -82,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Add event listeners for input fields
+    // Add event listeners for input fields to fetch suggestions
     pairsContainer.addEventListener('input', function (event) {
         if (event.target.tagName === 'INPUT' && event.target.list) {
             updateSuggestions(event.target, event.target.list.id);
@@ -114,8 +116,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    const routeColors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'yellow'];
-
     // Handle form submission
     form.addEventListener('submit', function (event) {
         event.preventDefault();
@@ -140,34 +140,101 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Clear previous routes
                 routeLayers.forEach((layer) => map.removeLayer(layer));
                 routeLayers = [];
-    
-                data.forEach((result, index) => {
-                    const { origin, destination, route_geometry } = result;
-    
+
+                const centralPoint = data.central_point;
+                const nearbyPlaces = data.nearby_places;
+
+                // Display closest points among all routes
+                const { closest_points, min_distance } = data;
+                if (closest_points) {
+                    const [point1, point2] = closest_points;
+
+                    // Add markers for the closest points
+                    const marker1 = L.marker([point1[0], point1[1]], {
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Example icon
+                            iconSize: [20, 20],
+                        }),
+                    }).addTo(map).bindPopup('Closest Point 1').openPopup();
+
+                    const marker2 = L.marker([point2[0], point2[1]], {
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Example icon
+                            iconSize: [20, 20],
+                        }),
+                    }).addTo(map).bindPopup('Closest Point 2').openPopup();
+
+                    routeLayers.push(marker1, marker2);
+
+                    // Draw a line between the closest points
+                    const line = L.polyline([point1, point2], { color: 'green', weight: 2 }).addTo(map);
+                    routeLayers.push(line);
+                }
+
+                // Process each origin-destination pair
+                data.results.forEach((result, index) => {
+                    const { origin, destination, route_geometry, closest_point, min_distance } = result;
+
                     // Add markers for origin and destination
                     const originMarker = L.marker([origin[0], origin[1]]).addTo(map).bindPopup(`Origin ${index + 1}`).openPopup();
                     const destinationMarker = L.marker([destination[0], destination[1]]).addTo(map).bindPopup(`Destination ${index + 1}`).openPopup();
-    
+
                     // Get the color for this route
                     const routeColor = routeColors[index % routeColors.length];
-    
+
                     // Decode and draw each leg of the route
                     if (route_geometry) {
                         route_geometry.forEach((encodedPolyline) => {
                             // Decode the encoded polyline
                             const decodedPolyline = polyline.decode(encodedPolyline);
-    
+
                             // Add the decoded polyline to the map with the assigned color
                             const route = L.polyline(decodedPolyline, {
                                 color: routeColor,
                                 weight: 4,
                             }).addTo(map);
-    
+
                             routeLayers.push(route);
                         });
                     }
-    
+
+                    // Add a marker for the closest point
+                    if (closest_point) {
+                        const closestMarker = L.marker([closest_point[0], closest_point[1]], {
+                            icon: L.icon({
+                                iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Example icon
+                                iconSize: [20, 20],
+                            }),
+                        }).addTo(map).bindPopup(`Closest Point<br>Distance: ${min_distance.toFixed(2)} km`).openPopup();
+
+                        routeLayers.push(closestMarker);
+                    }
+
                     routeLayers.push(originMarker, destinationMarker);
+                });
+
+                // Add a marker for the central point
+                if (centralPoint) {
+                    const centralMarker = L.marker([centralPoint[0], centralPoint[1]], {
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', // Example icon
+                            iconSize: [30, 30],
+                        }),
+                    }).addTo(map).bindPopup('Central Meeting Point').openPopup();
+
+                    routeLayers.push(centralMarker);
+                }
+
+                // Add markers for nearby places
+                nearbyPlaces.forEach((place) => {
+                    const placeMarker = L.marker([place.latitude, place.longitude], {
+                        icon: L.icon({
+                            iconUrl: 'https://cdn-icons-png.flaticon.com/512/854/854878.png', // Example icon
+                            iconSize: [20, 20],
+                        }),
+                    }).addTo(map).bindPopup(place.name);
+
+                    routeLayers.push(placeMarker);
                 });
             })
             .catch((error) => {

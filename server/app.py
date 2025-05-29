@@ -3,6 +3,8 @@ import os
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+import polyline
+import math
 
 # Load environment variables from .env file
 load_dotenv()
@@ -100,6 +102,8 @@ def calculate():
         return jsonify({"error": "Origins and destinations must have the same number of entries"}), 400
 
     results = []
+    all_routes = []
+
     for origin, destination in zip(origins, destinations):
         origin_coords = get_coordinates_from_onemap(origin.strip())
         destination_coords = get_coordinates_from_onemap(destination.strip())
@@ -107,16 +111,82 @@ def calculate():
 
         if origin_coords and destination_coords:
             route_geometry = get_fastest_route(origin_coords, destination_coords)
-            print(f"Route Geometry for {origin} to {destination}: {route_geometry}")  # Log route geometry
+            if route_geometry:
+                # Decode the route geometry for this origin-destination pair
+                decoded_route = []
+                for encoded_polyline in route_geometry:
+                    decoded_route.extend(polyline.decode(encoded_polyline))  # Decode and combine all legs
+                all_routes.append(decoded_route)  # Add the decoded route to the list
 
-            results.append({
-                "origin": origin_coords,
-                "destination": destination_coords,
-                "route_geometry": route_geometry  # List of encoded polylines
-            })
+                results.append({
+                    "origin": origin_coords,
+                    "destination": destination_coords,
+                    "route_geometry": route_geometry,  # List of encoded polylines
+                })
 
-    print("Final Results:", results)  # Log the final results
-    return jsonify(results)
+    # Find the closest points among all routes
+    closest_points, min_distance = find_closest_points_among_routes(all_routes)
+
+    return jsonify({
+        "results": results,
+        "closest_points": closest_points,  # Pair of closest points
+        "min_distance": min_distance  # Distance between the closest points
+    })
+
+def find_closest_points_among_routes(all_routes):
+    """
+    Find the closest point among multiple routes using Euclidean distance.
+    :param all_routes: List of routes, where each route is a list of (latitude, longitude) points.
+    :return: Closest point pair ((lat1, lon1), (lat2, lon2)) and the minimum distance.
+    """
+    min_distance = float('inf')
+    closest_points = None
+
+    # Flatten all points into a single list with route identifiers
+    all_points = []
+    for route_index, route in enumerate(all_routes):
+        for point in route:
+            all_points.append((route_index, point))  # Keep track of which route the point belongs to
+
+    # Compare every point with every other point
+    for i, (route1_index, point1) in enumerate(all_points):
+        for j, (route2_index, point2) in enumerate(all_points):
+            # Skip comparison if points are from the same route
+            if route1_index == route2_index:
+                continue
+
+            # Calculate Euclidean distance
+            distance = math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
+            if distance < min_distance:
+                min_distance = distance
+                closest_points = (point1, point2)
+
+    return closest_points, min_distance
+
+def get_nearby_places(central_point):
+    url = "https://www.onemap.gov.sg/api/common/elastic/reversegeocode"
+    params = {
+        "location": f"{central_point[1]},{central_point[0]}",  # Longitude,Latitude
+        "buffer": 500,  # Search within 500 meters
+        "addressType": "All",
+        "otherFeatures": "Y"
+    }
+    headers = {
+        "Authorization": f"Bearer {ONEMAP_API_KEY}"
+    }
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        # Extract up to 5 nearby places
+        return [
+            {
+                "name": place.get("SEARCHVAL"),
+                "latitude": float(place.get("LATITUDE")),
+                "longitude": float(place.get("LONGITUDE"))
+            }
+            for place in data.get("GeocodeInfo", [])[:5]
+        ]
+    return []
 
 @app.route('/<path:filename>')
 def static_files(filename):
