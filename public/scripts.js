@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const addPairButton = document.getElementById('add-pair');
     const pairsContainer = document.getElementById('origin-destination-pairs');
     const map = L.map('map').setView([1.3521, 103.8198], 12); // Centered on Singapore
+    const loadingSpinner = document.getElementById('loading-spinner');
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -119,6 +120,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Handle form submission
     form.addEventListener('submit', function (event) {
         event.preventDefault();
+        console.log('Showing spinner');
+        // Show the loading spinner
+        loadingSpinner.style.display = 'flex';
 
         const origins = Array.from(document.querySelectorAll('input[name="origins"]')).map((input) => input.value.trim());
         const destinations = Array.from(document.querySelectorAll('input[name="destinations"]')).map((input) => input.value.trim());
@@ -137,6 +141,9 @@ document.addEventListener('DOMContentLoaded', function () {
         })
             .then((response) => response.json())
             .then((data) => {
+                // Hide the loading spinner
+                loadingSpinner.style.display = 'none';
+
                 // Clear previous routes
                 routeLayers.forEach((layer) => map.removeLayer(layer));
                 routeLayers = [];
@@ -223,6 +230,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     }).addTo(map).bindPopup('Central Meeting Point').openPopup();
 
                     routeLayers.push(centralMarker);
+
+                    const centralCircle = L.circle([centralPoint[0], centralPoint[1]], {
+                        color: 'blue', // Circle border color
+                        fillColor: 'blue', // Circle fill color
+                        fillOpacity: 0.2, // Low opacity for the fill
+                        radius: 500, // Radius in meters
+                    }).addTo(map);
+                
+                    routeLayers.push(centralCircle);
                 }
 
                 // Add markers for nearby places
@@ -239,6 +255,9 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch((error) => {
                 console.error('Error:', error);
+
+                // Hide the loading spinner in case of an error
+                loadingSpinner.style.display = 'none';
             });
     });
 });
